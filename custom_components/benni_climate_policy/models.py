@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 import hashlib
 import json
 from typing import Any, Literal
@@ -85,8 +85,6 @@ class EffectiveTemperatureBreakdown:
 class WindowState:
     open_state: str | None = None
     tilt_state: str | None = None
-    active_since: datetime | None = None
-    sustained_open_delay: timedelta = timedelta(0)
 
     @property
     def open_blocks(self) -> bool:
@@ -100,14 +98,16 @@ class WindowState:
     def blocks_heating(self) -> bool:
         return self.open_blocks or self.tilt_blocks
 
-    def blocks_heating_at(self, now: datetime, *, immediate: bool = False) -> bool:
-        if not self.blocks_heating:
-            return False
-        if immediate or self.sustained_open_delay <= timedelta(0):
-            return True
-        if self.active_since is None:
-            return True
-        return now - self.active_since >= self.sustained_open_delay
+
+def window_state_from_master_value(value: Any) -> WindowState:
+    """Translate one openings-master value into a fail-safe window state."""
+    text = "" if value is None else str(value).strip().lower()
+    if text in ("", "unknown", "unavailable", "stale"):
+        return WindowState("unknown", "off")
+    return WindowState(
+        "on" if text == "open" else "off",
+        "on" if text == "tilted" else "off",
+    )
 
 
 @dataclass(frozen=True)

@@ -907,7 +907,7 @@ def decide_zone(
         profile = "off"
         reason = f"bio_{bio}_forces_off"
         path.append(reason)
-    elif any(w.blocks_heating_at(now, immediate=day_state in ("early_night", "late_night")) for w in zone_input.windows):
+    elif any(w.blocks_heating for w in zone_input.windows):
         profile = "off"
         reason = "window_blocks_heating"
         path.append(reason)
