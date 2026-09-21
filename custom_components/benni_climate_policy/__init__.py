@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant, ServiceCall
 
 from .const import (
+    CONF_APPLY_ACTIVE,
     CORE_OPENINGS_MASTER_ENTITY,
     DATA_COORDINATOR,
     DOMAIN,
@@ -21,6 +22,24 @@ from .const import (
 )
 
 PLATFORM_NAMES = ["sensor", "binary_sensor", "switch", "button"]
+
+
+def _reload_relevant_options(options: dict[str, Any]) -> dict[str, Any]:
+    relevant = dict(options)
+    relevant.pop(CONF_APPLY_ACTIVE, None)
+    return relevant
+
+
+class _ConfigEntryOptionsListener:
+    def __init__(self, options: dict[str, Any]) -> None:
+        self._reload_options = _reload_relevant_options(options)
+
+    async def __call__(self, hass: "HomeAssistant", entry: "ConfigEntry") -> None:
+        reload_options = _reload_relevant_options(entry.options)
+        if reload_options == self._reload_options:
+            return
+        self._reload_options = reload_options
+        await hass.config_entries.async_reload(entry.entry_id)
 
 LEGACY_ENTITY_REPLACEMENTS: dict[str, str] = {
     "sensor.context_activity_state_combined": "sensor.benni_combined_context_activity_state",
@@ -104,12 +123,8 @@ async def async_setup_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bool
     await async_setup_view(hass)
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
     _register_services(hass)
-    entry.async_on_unload(entry.add_update_listener(_async_reload))
+    entry.async_on_unload(entry.add_update_listener(_ConfigEntryOptionsListener(entry.options)))
     return True
-
-
-async def _async_reload(hass: "HomeAssistant", entry: "ConfigEntry") -> None:
-    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bool:

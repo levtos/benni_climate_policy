@@ -8,6 +8,7 @@ from custom_components.benni_climate_policy.models import (
     SourceValue,
     WindowState,
     ZoneInput,
+    window_state_from_master_value,
 )
 from custom_components.benni_climate_policy.policy import (
     FloorSlabDeltaInput,
@@ -189,42 +190,60 @@ def test_living_area_window_blocker_wins_over_summer_spar():
             assert plan.allowed_profile == "off"
 
 
-def test_terrace_door_sustained_open_delay_until_early_night():
+def test_terrace_door_open_blocks_immediately():
     now = datetime(2026, 7, 1, 18)
-    delayed = WindowState("on", "off", active_since=now - timedelta(minutes=4), sustained_open_delay=timedelta(minutes=5))
-    plan = decide_zone(ZoneInput("kitchen", thermostat_entity_id="climate.kitchen", windows=(delayed,)), ctx(), eff(0), now)
-    assert plan.profile == "spar"
-
-    sustained = WindowState("on", "off", active_since=now - timedelta(minutes=5), sustained_open_delay=timedelta(minutes=5))
-    plan = decide_zone(ZoneInput("kitchen", thermostat_entity_id="climate.kitchen", windows=(sustained,)), ctx(), eff(0), now)
-    assert plan.profile == "off"
-    assert plan.reason == "window_blocks_heating"
-
-    early_night = decide_zone(
-        ZoneInput("kitchen", thermostat_entity_id="climate.kitchen", windows=(delayed,)),
-        ctx(day_state="early_night"),
-        eff(0),
-        now.replace(hour=21),
-    )
-    assert early_night.profile == "off"
-
-
-def test_terrace_grace_never_overrides_tilted_living_window():
-    now = datetime(2026, 7, 1, 18)
-    tilted_living_window = WindowState("off", "on")
-    terrace_in_grace = WindowState("on", "off", active_since=now - timedelta(minutes=1), sustained_open_delay=timedelta(minutes=5))
-
     for zone_name in ("living_room", "kitchen"):
         plan = decide_zone(
-            ZoneInput(zone_name, thermostat_entity_id=f"climate.{zone_name}", windows=(tilted_living_window, terrace_in_grace)),
+            ZoneInput(zone_name, thermostat_entity_id=f"climate.{zone_name}", windows=(WindowState("on", "off"),)),
             ctx(),
             eff(0),
             now,
         )
-
         assert plan.profile == "off"
         assert plan.reason == "window_blocks_heating"
-        assert plan.target_temperature == 10.0
+
+
+def test_terrace_door_tilted_blocks_immediately():
+    now = datetime(2026, 7, 1, 18)
+    for zone_name in ("living_room", "kitchen"):
+        plan = decide_zone(
+            ZoneInput(zone_name, thermostat_entity_id=f"climate.{zone_name}", windows=(WindowState("off", "on"),)),
+            ctx(),
+            eff(0),
+            now,
+        )
+        assert plan.profile == "off"
+        assert plan.reason == "window_blocks_heating"
+
+
+def test_other_opening_changes_cannot_lift_terrace_block():
+    now = datetime(2026, 7, 1, 18)
+    terrace_open = WindowState("on", "off")
+
+    for zone_name in ("living_room", "kitchen"):
+        for other_opening in (WindowState("off", "off"), WindowState("on", "off"), WindowState("unknown", "off")):
+            plan = decide_zone(
+                ZoneInput(zone_name, thermostat_entity_id=f"climate.{zone_name}", windows=(other_opening, terrace_open)),
+                ctx(),
+                eff(0),
+                now,
+            )
+
+            assert plan.profile == "off"
+            assert plan.reason == "window_blocks_heating"
+            assert plan.target_temperature == 10.0
+
+
+def test_stale_master_opening_is_fail_safe():
+    stale = window_state_from_master_value("stale")
+
+    assert stale.open_state == "unknown"
+    assert stale.blocks_heating is True
+
+
+def test_unknown_and_unavailable_master_openings_remain_fail_safe():
+    for value in ("unknown", "unavailable", None, ""):
+        assert window_state_from_master_value(value).blocks_heating is True
 
 
 def test_free_time_early_night_holds_comfort_outside_summer():

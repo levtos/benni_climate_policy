@@ -85,8 +85,16 @@ def test_window_inputs_read_openings_master_attributes():
     assert '"living_window_left"' in COORDINATOR_SOURCE
     assert '"living_window_right"' in COORDINATOR_SOURCE
     assert '"kitchen_patio_door"' in COORDINATOR_SOURCE
-    assert "def _master_opening_activity" in COORDINATOR_SOURCE
+    assert "window_state_from_master_value" in COORDINATOR_SOURCE
     assert "CORE_OPENINGS_MASTER_ENTITY" in COORDINATOR_SOURCE
+
+
+def test_window_blocking_does_not_depend_on_shared_master_timestamps():
+    window_source = _function_source(COORDINATOR_SOURCE, "_window_state")
+
+    assert "last_changed" not in window_source
+    assert "sustained_open_delay" not in window_source
+    assert "window_state_from_master_value" in window_source
 
 
 def test_debug_payload_exposes_compact_performance_diagnostics():

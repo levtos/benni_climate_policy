@@ -72,6 +72,7 @@ from .models import (
     WindowState,
     ZoneInput,
     ZonePlan,
+    window_state_from_master_value,
 )
 from .options import apply_cooldown_seconds_from_config
 from .policy import (
@@ -95,7 +96,6 @@ from .weather_resolver import DEFAULT_FORECAST_CACHE_TTL_SECONDS, ForecastCache,
 _LOGGER = logging.getLogger(__name__)
 EVALUATE_DEBOUNCE_SECONDS = 2
 LAST_KNOWN_VALUE_TTL_SECONDS = 2 * 60 * 60
-TERRACE_SUSTAINED_OPEN_DELAY = timedelta(minutes=5)
 BOOST_STANDARD_DURATION = timedelta(minutes=45)
 BOOST_PRE_NIGHT_DURATION = timedelta(minutes=15)
 BATH_FAN_USAGE_HOLD_DURATION = timedelta(minutes=30)
@@ -219,17 +219,6 @@ def _window_activity_from_state(state: Any, attr_name: str, *, active_states: tu
         active = _coerce_bool(state.attributes.get(attr_name))
         return ("on" if active else "off"), active
     return state.state, state.state in active_states
-
-
-def _master_opening_activity(state: Any, attr_name: str, *, wants_open: bool) -> tuple[str | None, bool]:
-    if state is None:
-        return None, False
-    value = state.attributes.get(attr_name)
-    if value in ("unknown", "unavailable", None, ""):
-        return "unknown" if wants_open else "off", False
-    text = str(value).lower()
-    active = text == ("open" if wants_open else "tilted")
-    return ("on" if active else "off"), active
 
 
 class ClimatePolicyCoordinator:
@@ -708,19 +697,13 @@ class ClimatePolicyCoordinator:
         return (
             self._window_state(CONF_LIVING_WINDOW_LEFT_OPEN, CONF_LIVING_WINDOW_LEFT_TILT),
             self._window_state(CONF_LIVING_WINDOW_RIGHT_OPEN, CONF_LIVING_WINDOW_RIGHT_TILT),
-            self._window_state(
-                CONF_KITCHEN_PATIO_OPEN,
-                CONF_KITCHEN_PATIO_TILT,
-                sustained_open_delay=TERRACE_SUSTAINED_OPEN_DELAY,
-            ),
+            self._window_state(CONF_KITCHEN_PATIO_OPEN, CONF_KITCHEN_PATIO_TILT),
         )
 
     def _window_state(
         self,
         open_key: str,
         tilt_key: str,
-        *,
-        sustained_open_delay: timedelta = timedelta(0),
     ) -> WindowState:
         open_state = self._state_obj(open_key)
         tilt_state = self._state_obj(tilt_key)
@@ -730,34 +713,20 @@ class ClimatePolicyCoordinator:
             and OPENING_ATTRIBUTE_BY_KEY.get(open_key) == OPENING_ATTRIBUTE_BY_KEY.get(tilt_key)
         ):
             attr_name = OPENING_ATTRIBUTE_BY_KEY[open_key]
-            open_value, open_active = _master_opening_activity(
-                open_state, attr_name, wants_open=True
+            return window_state_from_master_value(
+                open_state.attributes.get(attr_name) if open_state else None
             )
-            tilt_value, tilt_active = _master_opening_activity(
-                tilt_state, attr_name, wants_open=False
-            )
-        else:
-            open_value, open_active = _window_activity_from_state(
-                open_state,
-                "open",
-                active_states=tuple(value for value in ("on", "open", "true", "True") if value is not False),
-            )
-            tilt_value, tilt_active = _window_activity_from_state(
-                tilt_state,
-                "tilted",
-                active_states=("on", "open", "true", "True", True),
-            )
-        active_since = None
-        if open_state and open_active:
-            active_since = open_state.last_changed
-        if tilt_state and tilt_active:
-            active_since = min(active_since, tilt_state.last_changed) if active_since else tilt_state.last_changed
-        return WindowState(
-            open_value,
-            tilt_value,
-            active_since=active_since,
-            sustained_open_delay=sustained_open_delay,
+        open_value, _ = _window_activity_from_state(
+            open_state,
+            "open",
+            active_states=tuple(value for value in ("on", "open", "true", "True") if value is not False),
         )
+        tilt_value, _ = _window_activity_from_state(
+            tilt_state,
+            "tilted",
+            active_states=("on", "open", "true", "True", True),
+        )
+        return WindowState(open_value, tilt_value)
 
     def _zone_input(self, zone: str) -> ZoneInput:
         windows: tuple[WindowState, ...]
