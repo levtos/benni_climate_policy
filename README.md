@@ -1,3 +1,5 @@
+![VESTA](brand/logos/logo-256.png)
+
 # benni_climate_policy
 
 Eigenstaendige HACS-Custom-Integration fuer Bennis Klima-Policy.
@@ -60,3 +62,8 @@ am Ende selbst Source of Truth fuer Klima-Entscheidungen sein; alte
 Migrationsreferenz.
 Alte `*_combined` Feels-like-Sensoren sind ebenfalls nur Migration/Referenz und
 keine finale Runtime-Abhaengigkeit.
+
+
+## Unicorn Station branding
+
+**VESTA** is the product brand. See [asset provenance and HA display conventions](brand/README.md). Technical identities and behavior remain unchanged.
