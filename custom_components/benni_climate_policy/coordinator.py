@@ -818,6 +818,9 @@ class ClimatePolicyCoordinator:
 
     def _apply_hysteresis(self, zone: str, plan: ZonePlan, now: datetime, tuning: Any) -> ZonePlan:
         previous = self._zone_profile_state.get(zone)
+        if zone in HEATING_ZONES and previous == "boost" and threshold_for_month_config(now.month, tuning)["boost"] is None:
+            self._zone_hysteresis_pending.pop(zone, None)
+            return plan
         if previous is None or previous == plan.profile:
             self._zone_hysteresis_pending.pop(zone, None)
             return plan
@@ -870,6 +873,11 @@ class ClimatePolicyCoordinator:
         now: datetime,
         tuning: Any,
     ) -> None:
+        if threshold_for_month_config(now.month, tuning)["boost"] is None:
+            for zone_id in HEATING_ZONES:
+                self._boost_until[zone_id] = None
+                self._boost_reason[zone_id] = None
+            return
         day_state = _state_value(context.day_state.value)
         bio = _state_value(context.bio_state.value)
         presence_band = _state_value(context.presence_band.value)
