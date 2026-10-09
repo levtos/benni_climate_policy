@@ -1,0 +1,38 @@
+{
+  "brand": "VESTA",
+  "repository": "levtos/benni_climate_policy",
+  "domain": "benni_climate_policy",
+  "original_sha256": "a9999b3dc509c17f4592f789736f526587c2f8f5bb7b711993b4f83fdb877cb0",
+  "original_size": [
+    1254,
+    1254
+  ],
+  "original_mode": "RGB",
+  "icon_crop_xyxy": [
+    177,
+    0,
+    1077,
+    900
+  ],
+  "resampling": "Pillow LANCZOS",
+  "files": {
+    "brand/icons/icon-128.png": "243a3195004171385f61ac1786649746aa2ef53f3ef2cfaec9234f680d65bd13",
+    "brand/icons/icon-256.png": "fdef2bfd01a2a879edf5f150ec2783bcf0a36d96f47e178cbcbb49ab2b4f367b",
+    "brand/icons/icon-32.png": "56fcb1b0c667c3d69df0f70a837c2803a1f28a5d5cff676858a1008e4d50157d",
+    "brand/icons/icon-512.png": "eb2a2245355cb4b2e6c2e83d4b8a20ca85df76e994ce1b2b0a1cd2b5f8f0b8bc",
+    "brand/icons/icon-64.png": "e742cb52bd0f50462726adb4b114a932eef6dac6aba04be5eb96e00cc31e92c4",
+    "brand/logos/logo-1024.png": "7444a5d4eb4db06918a302ee20faa6562ee290cf256d1004edae34785a6255f2",
+    "brand/logos/logo-128.png": "a3710266ec2b13c99d158c825d21b1d05a272eff64636fd7973620ee66653ae3",
+    "brand/logos/logo-256.png": "5a95b880a7d5a85b45025472328d17f31af73bb6587169f35338aa82cac4d5f1",
+    "brand/logos/logo-512.png": "ce104c9819bda7be75abce9849e54bdd56d96272f973d0965ca1f20a4e1a8b3c",
+    "brand/original/VESTA.png": "a9999b3dc509c17f4592f789736f526587c2f8f5bb7b711993b4f83fdb877cb0",
+    "custom_components/benni_climate_policy/brand/dark_icon.png": "fdef2bfd01a2a879edf5f150ec2783bcf0a36d96f47e178cbcbb49ab2b4f367b",
+    "custom_components/benni_climate_policy/brand/dark_icon@2x.png": "eb2a2245355cb4b2e6c2e83d4b8a20ca85df76e994ce1b2b0a1cd2b5f8f0b8bc",
+    "custom_components/benni_climate_policy/brand/dark_logo.png": "5a95b880a7d5a85b45025472328d17f31af73bb6587169f35338aa82cac4d5f1",
+    "custom_components/benni_climate_policy/brand/dark_logo@2x.png": "ce104c9819bda7be75abce9849e54bdd56d96272f973d0965ca1f20a4e1a8b3c",
+    "custom_components/benni_climate_policy/brand/icon.png": "fdef2bfd01a2a879edf5f150ec2783bcf0a36d96f47e178cbcbb49ab2b4f367b",
+    "custom_components/benni_climate_policy/brand/icon@2x.png": "eb2a2245355cb4b2e6c2e83d4b8a20ca85df76e994ce1b2b0a1cd2b5f8f0b8bc",
+    "custom_components/benni_climate_policy/brand/logo.png": "5a95b880a7d5a85b45025472328d17f31af73bb6587169f35338aa82cac4d5f1",
+    "custom_components/benni_climate_policy/brand/logo@2x.png": "ce104c9819bda7be75abce9849e54bdd56d96272f973d0965ca1f20a4e1a8b3c"
+  }
+}
