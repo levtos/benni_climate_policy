@@ -20,8 +20,8 @@ from .policy import (
 BathFanMode = Literal["off", "akut", "nachluft", "stoss"]
 
 BATH_SETPOINT_PROTECTION = 16.0
-BATH_SETPOINT_GROUND = 19.0
-BATH_SETPOINT_COMFORT = 22.5
+BATH_SETPOINT_GROUND = 22.0
+BATH_SETPOINT_COMFORT = 23.0
 BATH_SETPOINT_OFF = 10.0
 BATH_OVER_TARGET_HYSTERESIS = 0.3
 BATH_COMFORT_SUPPRESSION_TEFF = 18.0
@@ -35,7 +35,7 @@ BATH_DEWPOINT_ACUTE_THRESHOLD = 17.0
 BATH_HUMIDITY_GROUND_HEAT_THRESHOLD = 68.0
 BATH_DEWPOINT_GROUND_HEAT_THRESHOLD = 15.0
 BATH_HUMIDITY_GROUND_HEAT_TEFF_LIMIT = 16.0
-BATH_HUMIDITY_GROUND_HEAT_TARGET = 22.0
+BATH_HUMIDITY_GROUND_HEAT_TARGET = BATH_SETPOINT_GROUND
 BATH_HUMIDITY_GROUND_HEAT_OFF_AT = 22.5
 BATH_AH_DELTA_AFTERRUN_ON = 1.5
 BATH_AH_DELTA_AFTERRUN_OFF = 0.8
@@ -191,7 +191,7 @@ class BathTuning:
         return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
     def as_dict(self, *, include_sources: bool = True) -> dict[str, Any]:
-        data = {
+        data: dict[str, Any] = {
             "setpoint_protection": self.setpoint_protection,
             "setpoint_ground": self.setpoint_ground,
             "setpoint_comfort": self.setpoint_comfort,
@@ -460,7 +460,7 @@ def decide_bathroom_climate(
     day_state = _ctx_value(ctx, "day_state")
     workday = (_ctx_value(ctx, "workday_state") or _ctx_value(ctx, "day_context") or "").lower()
     is_workday = workday in ("werktag", "workday", "working_day", "on")
-    is_free = workday in ("wochenende", "weekend", "frei", "free", "holiday", "off")
+    is_free = workday in ("wochenende", "weekend", "frei", "feiertag", "free", "holiday", "off")
 
     profile: Literal["off", "protection", "grundwaerme", "komfort"] = "grundwaerme"
     reason = "bath_ground_heat_default"
@@ -476,7 +476,7 @@ def decide_bathroom_climate(
     else:
         comfort_phase = (
             (is_workday and day_state == "early_morning")
-            or (is_free and day_state == "late_morning")
+            or (is_free and day_state == "forenoon")
             or day_state == "late_evening"
         )
         if comfort_phase and teff <= tuning.comfort_suppression_teff:

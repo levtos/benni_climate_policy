@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import pytest
+
 from custom_components.benni_climate_policy.bathroom import (
     OPT_BATH_HUMIDITY_GROUND_HEAT_OFF_AT,
     OPT_BATH_HUMIDITY_GROUND_HEAT_TARGET,
     OPT_BATH_SETPOINT_GROUND,
+    OPT_BATH_SETPOINT_COMFORT,
     BathroomClimateInput,
     BathroomHumidityInput,
     absolute_humidity_gm3,
@@ -21,6 +24,14 @@ from custom_components.benni_climate_policy.models import (
     ClimateContextSnapshot,
     EffectiveTemperatureBreakdown,
     SourceValue,
+)
+from custom_components.benni_climate_policy.policy import (
+    indoor_heat_option_key,
+    policy_tuning_from_options,
+)
+from custom_components.benni_climate_policy.tuning_options import (
+    default_option_values,
+    validated_options_update,
 )
 
 
@@ -78,7 +89,7 @@ def humidity_input(
 def test_bathroom_defaults_ground_heat():
     plan = decide_bathroom_climate(climate_input(temp=18.5), ctx(), eff(10), datetime(2026, 1, 1, 12), bath_tuning_from_options({}))
     assert plan.profile == "grundwaerme"
-    assert plan.target_temperature == 19.0
+    assert plan.target_temperature == 22.0
 
 
 def test_bathroom_missing_effective_temperature_uses_protection():
@@ -92,12 +103,12 @@ def test_bathroom_comfort_windows_and_teff_limit():
     tuning = bath_tuning_from_options({})
     plan = decide_bathroom_climate(climate_input(), ctx(day_state="early_morning", workday="werktag"), eff(10), datetime(2026, 1, 1, 7), tuning)
     assert plan.profile == "komfort"
-    assert plan.target_temperature == 22.5
+    assert plan.target_temperature == 23.0
 
     suppressed = decide_bathroom_climate(climate_input(temp=18.5), ctx(day_state="early_morning", workday="werktag"), eff(19), datetime(2026, 1, 1, 7), tuning)
     assert suppressed.profile == "grundwaerme"
 
-    weekend = decide_bathroom_climate(climate_input(), ctx(day_state="late_morning", workday="wochenende"), eff(10), datetime(2026, 1, 3, 10), tuning)
+    weekend = decide_bathroom_climate(climate_input(), ctx(day_state="forenoon", workday="wochenende"), eff(10), datetime(2026, 1, 3, 10), tuning)
     assert weekend.profile == "komfort"
 
     evening = decide_bathroom_climate(climate_input(), ctx(day_state="late_evening"), eff(10), datetime(2026, 1, 1, 22), tuning)
@@ -133,7 +144,7 @@ def test_bathroom_over_target_forces_heating_off_even_when_fan_can_run():
 
 def test_bathroom_ground_heat_stops_when_room_is_warm_enough():
     plan = decide_bathroom_climate(
-        climate_input(temp=20.3),
+        climate_input(temp=22.5),
         ctx(),
         eff(10),
         datetime(2026, 1, 1, 12),
@@ -147,7 +158,7 @@ def test_bathroom_ground_heat_stops_when_room_is_warm_enough():
 
 def test_bathroom_humidity_ground_heat_overrides_warm_room_cutoff_when_cool_outside():
     plan = decide_bathroom_climate(
-        climate_input(temp=21.4, humidity=72.0),
+        climate_input(temp=21.7, humidity=72.0),
         ctx(),
         eff(12),
         datetime(2026, 6, 10, 6),
@@ -165,7 +176,7 @@ def test_bathroom_humidity_ground_heat_overrides_warm_room_cutoff_when_cool_outs
 
 def test_bathroom_humidity_ground_heat_respects_warm_weather_and_upper_cutoff():
     warm_weather = decide_bathroom_climate(
-        climate_input(temp=21.4, humidity=78.0),
+        climate_input(temp=22.6, humidity=78.0),
         ctx(),
         eff(24),
         datetime(2026, 7, 1, 6),
@@ -193,6 +204,92 @@ def test_bathroom_outdoor_bonus_steps():
     assert bath_outdoor_bonus(5, tuning) == 0.3
     assert bath_outdoor_bonus(16, tuning) == -0.5
     assert bath_outdoor_bonus(10, tuning) == 0.0
+
+
+@pytest.mark.parametrize("day_context", ["werktag", "wochenende", "frei", "feiertag"])
+@pytest.mark.parametrize("day_state", [
+    "early_night", "late_night", "early_morning", "forenoon", "midday",
+    "afternoon", "late_afternoon", "evening", "late_evening",
+])
+def test_bathroom_comfort_windows_match_producer_values(day_context, day_state):
+    plan = decide_bathroom_climate(
+        climate_input(temp=20, humidity=40),
+        ctx(day_state=day_state, workday=day_context),
+        eff(10),
+        datetime(2026, 11, 1, 10),
+        bath_tuning_from_options({}),
+    )
+    comfort = (
+        day_state == "late_evening"
+        or (day_context == "werktag" and day_state == "early_morning")
+        or (day_context != "werktag" and day_state == "forenoon")
+    )
+    assert plan.profile == ("komfort" if comfort else "grundwaerme")
+    assert plan.target_temperature == (23.0 if comfort else 22.0)
+
+
+@pytest.mark.parametrize(("temp", "last_mode", "expected_profile"), [
+    (21.49, "off", "grundwaerme"),
+    (21.5, "off", "off"),
+    (22.0, "off", "off"),
+    (22.0, "grundwaerme", "grundwaerme"),
+    (22.49, "grundwaerme", "grundwaerme"),
+    (22.5, "grundwaerme", "off"),
+    (22.51, "grundwaerme", "off"),
+])
+def test_bathroom_ground_heat_hysteresis(temp, last_mode, expected_profile):
+    plan = decide_bathroom_climate(
+        BathroomClimateInput(temp, 40, "climate.bath", last_mode=last_mode),
+        ctx(), eff(10), datetime(2026, 11, 1, 12), bath_tuning_from_options({}),
+    )
+    assert plan.profile == expected_profile
+    assert plan.indoor_heat_on_below == 21.5
+    assert plan.indoor_heat_off_at == 22.5
+    assert plan.indoor_min_hold_minutes == 20
+    assert plan.target_temperature == (22.0 if expected_profile == "grundwaerme" else 10.0)
+
+
+@pytest.mark.parametrize("drying_active", [False, True])
+@pytest.mark.parametrize("options", [
+    {},
+    {OPT_BATH_SETPOINT_GROUND: 23.0,
+     OPT_BATH_HUMIDITY_GROUND_HEAT_TARGET: 19.0,
+     OPT_BATH_HUMIDITY_GROUND_HEAT_OFF_AT: 20.0},
+])
+def test_bathroom_humidity_heat_never_lowers_normal_ground_heat(options, drying_active):
+    now = datetime(2026, 11, 1, 12)
+    tuning = bath_tuning_from_options(options)
+    normal = decide_bathroom_climate(climate_input(temp=21.7, humidity=40), ctx(), eff(10), now, tuning)
+    humid = decide_bathroom_climate(
+        climate_input(temp=21.7, humidity=72), ctx(), eff(10), now, tuning,
+        fan_drying_active=drying_active,
+    )
+    assert humid.profile == "grundwaerme"
+    assert humid.target_temperature >= normal.target_temperature
+    assert humid.indoor_heat_off_at >= normal.indoor_heat_off_at
+
+
+def test_bathroom_new_defaults_are_valid_in_tuning_and_saved_options_still_win():
+    defaults = default_option_values()
+    keys = [OPT_BATH_SETPOINT_GROUND, OPT_BATH_SETPOINT_COMFORT,
+            OPT_BATH_HUMIDITY_GROUND_HEAT_TARGET, OPT_BATH_HUMIDITY_GROUND_HEAT_OFF_AT]
+    keys += [indoor_heat_option_key("bathroom", profile, field)
+             for profile in ("grundwaerme", "komfort")
+             for field in ("heat_on_below", "heat_off_at", "min_hold_minutes")]
+    assert validated_options_update({}, {key: defaults[key] for key in keys})
+    assert [defaults[key] for key in keys] == [22.0, 23.0, 22.0, 22.5, 21.5, 22.5, 20, 22.5, 23.5, 30]
+
+    on_key = indoor_heat_option_key("bathroom", "grundwaerme", "heat_on_below")
+    off_key = indoor_heat_option_key("bathroom", "grundwaerme", "heat_off_at")
+    options = {OPT_BATH_SETPOINT_GROUND: 19.0, on_key: 18.5, off_key: 20.2}
+    plan = decide_bathroom_climate(
+        climate_input(temp=18, humidity=40), ctx(), eff(10), datetime(2026, 11, 1, 12),
+        bath_tuning_from_options(options), indoor_tuning=policy_tuning_from_options(options),
+    )
+    assert plan.target_temperature == 19.0
+    assert plan.indoor_heat_on_below == 18.5
+    assert plan.indoor_heat_off_at == 20.2
+    assert options == {OPT_BATH_SETPOINT_GROUND: 19.0, on_key: 18.5, off_key: 20.2}
 
 
 def test_bathroom_tuning_changes_plan_hash():
@@ -223,13 +320,13 @@ def test_bathroom_humidity_ground_heat_tuning_changes_plan_hash():
         eff(12),
         now,
         bath_tuning_from_options({
-            OPT_BATH_HUMIDITY_GROUND_HEAT_TARGET: 21.5,
-            OPT_BATH_HUMIDITY_GROUND_HEAT_OFF_AT: 22.0,
+            OPT_BATH_HUMIDITY_GROUND_HEAT_TARGET: 23.0,
+            OPT_BATH_HUMIDITY_GROUND_HEAT_OFF_AT: 23.5,
         }),
     )
 
-    assert tuned.target_temperature == 21.5
-    assert tuned.indoor_heat_off_at == 22.0
+    assert tuned.target_temperature == 23.0
+    assert tuned.indoor_heat_off_at == 23.5
     assert tuned.plan_hash != base.plan_hash
 
 
@@ -677,7 +774,7 @@ def test_bathroom_cooldown_drying_heat_engages_when_cool():
         tuning,
     )
     assert baseline.reason == "bath_ground_heat_default"
-    assert baseline.target_temperature == 19.0
+    assert baseline.target_temperature == 22.0
 
 
 def test_bathroom_diffuser_follows_fan_then_caps_then_off():

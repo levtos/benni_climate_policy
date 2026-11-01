@@ -6,12 +6,13 @@ from datetime import datetime, timedelta
 import hashlib
 import json
 import math
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from .models import (
     ClimateContextSnapshot,
     EffectiveTemperatureBreakdown,
     EffectiveTemperatureInput,
+    Quality,
     RoomComfort,
     SourceValue,
     ZoneInput,
@@ -73,8 +74,8 @@ DEFAULT_INDOOR_HEAT_RULES: dict[str, dict[str, tuple[float, float, int]]] = {
         "boost": (22.0, 24.0, 15),
     },
     INDOOR_GROUP_BATHROOM: {
-        "grundwaerme": (18.5, 20.2, 20),
-        "komfort": (21.8, 23.2, 30),
+        "grundwaerme": (21.5, 22.5, 20),
+        "komfort": (22.5, 23.5, 30),
     },
 }
 
@@ -551,7 +552,7 @@ def effective_outdoor_temperature(
         forecast_offset = max(-1.5, min(1.5, forecast_offset))
 
     effective = real + floor_offset + feels_offset + weather_offset + forecast_offset
-    quality = "ok"
+    quality: Quality = "ok"
     if inp.feels_like_temperature is None or inp.forecast_temperature is None:
         quality = "degraded"
     return EffectiveTemperatureBreakdown(
@@ -733,7 +734,7 @@ def _is_heating_profile(profile: str | None) -> bool:
 def evaluate_room_comfort(room_temperature: float | None, room_humidity: float | None, floor_slab_delta: float) -> RoomComfort:
     if room_temperature is None:
         return RoomComfort("unbekannt", "Raumtemperatur fehlt", "missing")
-    quality = "ok" if room_humidity is not None else "degraded"
+    quality: Quality = "ok" if room_humidity is not None else "degraded"
     perceived = room_temperature - min(max(floor_slab_delta, 0.0) * 0.25, 0.8)
     if room_humidity is not None:
         if room_humidity >= 75:
@@ -944,7 +945,7 @@ def decide_zone(
             if teff is None:
                 profile = "spar"
                 reason = "effective_temperature_missing_spar"
-            elif teff >= float(thresholds["off"]):
+            elif teff >= float(cast(float, thresholds["off"])):
                 profile = "off"
                 reason = "effective_temperature_above_off_threshold"
             elif month in SUMMER_MONTHS:
