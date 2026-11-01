@@ -6,6 +6,8 @@ import subprocess
 
 def _frontend_values() -> dict:
     script = r"""
+// The fixture below expects Berlin local time, independent of the runner's TZ.
+process.env.TZ = "Europe/Berlin";
 const fs = require("fs");
 const vm = require("vm");
 const source = fs.readFileSync("custom_components/benni_climate_policy/frontend/app/main.js", "utf8");
