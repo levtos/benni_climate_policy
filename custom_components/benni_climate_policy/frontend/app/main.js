@@ -2216,7 +2216,7 @@ class BcpApp extends HTMLElement {
     this._diagnosticsPackageFormat = "markdown";
     this._debugPayload = null;
     this._debugError = "";
-    this._debugFetchInFlight = false;
+    this._debugFetchInFlight = null;
     this._debugLastFetch = 0;
     this._lastHtml = "";
   }
@@ -2253,20 +2253,29 @@ class BcpApp extends HTMLElement {
   }
 
   async _fetchDebugPayload(force = false) {
-    if (!this._hass || !this._hass.callApi || this._debugFetchInFlight) return;
+    if (!this._hass || !this._hass.callApi) return;
+    if (!force && this._debugFetchInFlight) return;
     if (!force && !this._viewNeedsDebug()) return;
     const now = Date.now();
     if (!force && this._debugLastFetch && now - this._debugLastFetch < DEBUG_REFRESH_MS) return;
-    this._debugFetchInFlight = true;
+    // A refresh after saving supersedes requests that may contain the old settings.
+    const request = {};
+    this._debugFetchInFlight = request;
     this._debugLastFetch = now;
     try {
-      this._debugPayload = await this._hass.callApi("GET", DEBUG_API_PATH);
+      const payload = await this._hass.callApi("GET", DEBUG_API_PATH);
+      if (this._debugFetchInFlight !== request) return;
+      this._debugPayload = payload;
       this._debugError = "";
     } catch (err) {
-      this._debugError = err.message || String(err);
+      if (this._debugFetchInFlight === request) {
+        this._debugError = err.message || String(err);
+      }
     } finally {
-      this._debugFetchInFlight = false;
-      this._scheduleRender();
+      if (this._debugFetchInFlight === request) {
+        this._debugFetchInFlight = null;
+        this._scheduleRender();
+      }
     }
   }
 

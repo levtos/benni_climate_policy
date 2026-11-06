@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime, timedelta
 import logging
+from math import isfinite
 import time
 from typing import Any
 
@@ -633,7 +634,9 @@ class ClimatePolicyCoordinator:
             ZONE_BATHROOM: bathroom_plan,
         }
         for zone_id in HEATING_ZONES:
-            plans[zone_id] = self._apply_hysteresis(zone_id, plans[zone_id], now, tuning)
+            plans[zone_id] = self._apply_hysteresis(
+                zone_id, plans[zone_id], now, tuning, room_temperature=zone_inputs[zone_id].room_temperature
+            )
         self._apply_stateful_boosts(plans, zone_inputs, context, now, tuning)
         self._commit_zone_profiles(plans)
         self.bathroom_fan_plan = decide_bathroom_fan(
@@ -816,7 +819,15 @@ class ClimatePolicyCoordinator:
             last_calculated=now.isoformat(),
         )
 
-    def _apply_hysteresis(self, zone: str, plan: ZonePlan, now: datetime, tuning: Any) -> ZonePlan:
+    def _apply_hysteresis(
+        self,
+        zone: str,
+        plan: ZonePlan,
+        now: datetime,
+        tuning: Any,
+        *,
+        room_temperature: float | None,
+    ) -> ZonePlan:
         previous = self._zone_profile_state.get(zone)
         if zone in HEATING_ZONES and previous == "boost" and threshold_for_month_config(now.month, tuning)["boost"] is None:
             self._zone_hysteresis_pending.pop(zone, None)
@@ -826,6 +837,18 @@ class ClimatePolicyCoordinator:
             return plan
         previous_reason = self._zone_profile_reason.get(zone)
         if plan.reason in IMMEDIATE_DECISION_REASONS or previous_reason in IMMEDIATE_DECISION_REASONS:
+            self._zone_hysteresis_pending.pop(zone, None)
+            return plan
+        if (
+            zone in HEATING_ZONES
+            and previous == "off"
+            and plan.profile == "spar"
+            and plan.heat_demand is True
+            and plan.indoor_heat_demand_reason == "room_temperature_below_heat_on_below"
+            and room_temperature is not None
+            and isfinite(room_temperature)
+            and CONF_ZONE_TEMPERATURE.format(zone=zone) not in self._numeric_fallback_keys
+        ):
             self._zone_hysteresis_pending.pop(zone, None)
             return plan
         requirement = self._hysteresis_requirement(previous, plan.profile, plan.effective_outdoor_temperature, now, tuning)
