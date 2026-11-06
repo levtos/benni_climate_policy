@@ -24,6 +24,11 @@ Wohnzimmer und Kueche nutzen eine gemeinsame Wohnbereichsmatrix. Das Bad nutzt e
 
 Liegt der Raum ueber `heat_off_at`, entsteht ein Downshift-Plan mit `room_temperature_above_target_no_heating` oder `bath_temperature_above_target_no_heating`.
 
+Seit v0.1.14 wechseln Wohnzimmer und Kueche sofort von `off` auf `spar`,
+wenn die Policy `spar` freigibt und ein gueltiger aktueller Raumwert
+unter `heat_on_below` liegt. Die Aussenhysterese verzoegert diesen Wechsel
+nicht. Fenster-, Schlaf- und Anwesenheitssperren haben weiterhin Vorrang.
+
 ## Zieltemperaturen
 
 ### Bad: Legacy-Hotfix v0.1.13
